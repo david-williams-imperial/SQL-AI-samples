@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 using System.ComponentModel;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
@@ -13,23 +14,46 @@ public partial class Tools
         Title = "Insert Data",
         ReadOnly = false,
         Destructive = false),
-        Description("Updates data in a table in the SQL Database. Expects a valid INSERT SQL statement as input. ")]
+        Description("Inserts data into a table in the SQL Database. Expects a valid INSERT SQL statement as input.")]
     public async Task<DbOperationResult> InsertData(
         [Description("INSERT SQL statement")] string sql)
     {
-        var conn = await _connectionFactory.GetOpenConnectionAsync();
+        if (string.IsNullOrWhiteSpace(sql))
+        {
+            return new DbOperationResult(success: false, error: "SQL parameter cannot be null/empty/whitespace");
+        }
+
+        SqlConnection connection;
+
         try
         {
-            using (conn)
+            connection = await _connectionFactory.GetOpenConnectionAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to connect to database: {Message}", ex.Message);
+
+            return new DbOperationResult(success: false, error: $"Failed to connect to database: {ex.Message}");
+        }
+
+        try
+        {
+            await using (connection)
             {
-                using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
-                var rows = await cmd.ExecuteNonQueryAsync();
-                return new DbOperationResult(success: true, rowsAffected: rows);
+                await using (SqlCommand insertCommand = connection.CreateCommand())
+                {
+                    insertCommand.CommandText = sql;
+
+                    int rows = await insertCommand.ExecuteNonQueryAsync();
+
+                    return new DbOperationResult(success: true, rowsAffected: rows);
+                }
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "InsertData failed: {Message}", ex.Message);
+
             return new DbOperationResult(success: false, error: ex.Message);
         }
     }

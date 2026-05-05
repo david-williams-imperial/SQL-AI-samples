@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 using System.ComponentModel;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
@@ -17,19 +18,42 @@ public partial class Tools
     public async Task<DbOperationResult> CreateTable(
         [Description("CREATE TABLE SQL statement")] string sql)
     {
-        var conn = await _connectionFactory.GetOpenConnectionAsync();
+        if (string.IsNullOrWhiteSpace(sql))
+        {
+            return new DbOperationResult(success: false, error: "SQL parameter cannot be null/empty/whitespace");
+        }
+
+        SqlConnection connection;
+
         try
         {
-            using (conn)
+            connection = await _connectionFactory.GetOpenConnectionAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to connect to database: {Message}", ex.Message);
+
+            return new DbOperationResult(success: false, error: $"Failed to connect to database: {ex.Message}");
+        }
+
+        try
+        {
+            await using (connection)
             {
-                using var cmd = new Microsoft.Data.SqlClient.SqlCommand(sql, conn);
-                _ = await cmd.ExecuteNonQueryAsync();
-                return new DbOperationResult(success: true);
+                await using (SqlCommand createCommand = connection.CreateCommand())
+                {
+                    createCommand.CommandText = sql;
+
+                    await createCommand.ExecuteNonQueryAsync();
+
+                    return new DbOperationResult(success: true);
+                }
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "CreateTable failed: {Message}", ex.Message);
+
             return new DbOperationResult(success: false, error: ex.Message);
         }
     }

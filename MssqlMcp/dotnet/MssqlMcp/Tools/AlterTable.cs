@@ -11,12 +11,12 @@ namespace Mssql.McpServer;
 public partial class Tools
 {
     [McpServerTool(
-        Title = "Drop Table",
+        Title = "Alter Table",
         ReadOnly = false,
         Destructive = true),
-        Description("Drops a table in the SQL Database. Expects a valid DROP TABLE SQL statement as input.")]
-    public async Task<DbOperationResult> DropTable(
-        [Description("DROP TABLE SQL statement")] string sql)
+        Description("Alters an existing table in the SQL Database. Expects a valid ALTER TABLE SQL statement as input.")]
+    public async Task<DbOperationResult> AlterTable(
+        [Description("ALTER TABLE SQL statement")] string sql)
     {
         if (string.IsNullOrWhiteSpace(sql))
         {
@@ -40,11 +40,11 @@ public partial class Tools
         {
             await using (connection)
             {
-                await using (SqlCommand dropTableCommand = connection.CreateCommand())
+                await using (SqlCommand alterCommand = connection.CreateCommand())
                 {
-                    dropTableCommand.CommandText = sql;
+                    alterCommand.CommandText = sql;
 
-                    await dropTableCommand.ExecuteNonQueryAsync();
+                    await alterCommand.ExecuteNonQueryAsync();
 
                     return new DbOperationResult(success: true);
                 }
@@ -52,7 +52,7 @@ public partial class Tools
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "DropTable failed: {Message}", ex.Message);
+            _logger.LogError(ex, "AlterTable failed: {Message}", ex.Message);
 
             return new DbOperationResult(success: false, error: ex.Message);
         }
