@@ -267,16 +267,14 @@ namespace MssqlMcp.Tests
         }
 
         [Fact]
-        public async Task DropTable_ReturnsSuccess_WhenSqlIsValid()
+        public async Task DropTable_ReturnsSuccess_WhenTableExists()
         {
             // Ensure table exists and has data
             bool createTableResult = await CreateTestTable();
 
             Assert.True(createTableResult);
 
-            string sql = $"DROP TABLE IF EXISTS {_tableName}";
-
-            DbOperationResult result = await _tools.DropTable(sql);
+            DbOperationResult result = await _tools.DropTable(_tableName);
 
             Assert.NotNull(result);
             Assert.True(result.Success);
@@ -429,15 +427,16 @@ namespace MssqlMcp.Tests
         }
 
         [Fact]
-        public async Task DropTable_ReturnsError_WhenSqlIsInvalid()
+        public async Task DropTable_ReturnsError_WhenTableDoesNotExist()
         {
-            string sql = "DROP";
+            string fakeTableName = "Equipment";
 
-            DbOperationResult result = await _tools.DropTable(sql);
+            DbOperationResult result = await _tools.DropTable(fakeTableName);
 
             Assert.NotNull(result);
             Assert.False(result.Success);
-            Assert.Contains("syntax", result.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(result.Error);
+            Assert.Equal($"Table '{fakeTableName}' not found.", result.Error);
         }
 
         [Fact]

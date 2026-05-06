@@ -52,7 +52,7 @@ public partial class Tools
                     {
                         while (await reader.ReadAsync())
                         {
-                            Dictionary<string, object?> row = new Dictionary<string, object?>();
+                            Dictionary<string, object?> row = new Dictionary<string, object?>(reader.FieldCount);
 
                             for (int i = 0; i < reader.FieldCount; i++)
                             {
