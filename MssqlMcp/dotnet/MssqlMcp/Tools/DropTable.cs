@@ -17,7 +17,7 @@ public partial class Tools
         Destructive = true),
         Description(
             "Drops a table in the SQL Server Database. " +
-            "For more complex schema changes (e.g. dropping individual columns, indexes, or constraints), use the AlterTable tool instead.")]
+            "For more complex schema changes (e.g. dropping individual columns, indexes, or constraints), use the AlterDatabaseSchema tool instead.")]
     public async Task<DbOperationResult> DropTable(
         [Description("Name of the table to drop, optionally prefixed with the schema (e.g. dbo.mytable)")] string name)
     {

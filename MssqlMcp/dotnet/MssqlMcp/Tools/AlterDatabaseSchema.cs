@@ -11,12 +11,12 @@ namespace Mssql.McpServer;
 public partial class Tools
 {
     [McpServerTool(
-        Title = "Alter Table",
+        Title = "Alter Database Schema",
         ReadOnly = false,
         Destructive = true),
-        Description("Alters an existing table in the SQL Database. Expects a valid ALTER TABLE SQL statement as input.")]
-    public async Task<DbOperationResult> AlterTable(
-        [Description("ALTER TABLE SQL statement")] string sql)
+        Description("Can be used to create, alter, or drop tables, indexes, views, etc. Expects a valid ALTER TABLE (or similar) SQL statement as input.")]
+    public async Task<DbOperationResult> AlterDatabaseSchema(
+        [Description("SQL statement")] string sql)
     {
         if (string.IsNullOrWhiteSpace(sql))
         {
@@ -44,9 +44,9 @@ public partial class Tools
                 {
                     alterCommand.CommandText = sql;
 
-                    await alterCommand.ExecuteNonQueryAsync();
+                    int rowsAffected = await alterCommand.ExecuteNonQueryAsync();
 
-                    return new DbOperationResult(success: true);
+                    return new DbOperationResult(success: true, rowsAffected: rowsAffected);
                 }
             }
         }
