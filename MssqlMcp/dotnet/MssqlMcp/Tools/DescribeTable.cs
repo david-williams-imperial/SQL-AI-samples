@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 using System.ComponentModel;
+using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -19,7 +20,7 @@ public partial class Tools
         "WHERE t.name = @TableName AND (s.name = @TableSchema OR @TableSchema IS NULL)";
 
     private const string ColumnsQuery =
-        "SELECT c.name, ty.name AS type, c.max_length AS length, c.precision, c.scale, c.is_nullable AS nullable, p.value AS description " +
+        "SELECT c.[name], ty.[name] AS [type], c.max_length AS [length], c.[precision], c.scale, c.is_nullable AS nullable, c.is_identity, p.[value] AS [description], c.default_object_id, object_definition(c.default_object_id) as default_value " +
         "FROM sys.columns c " +
         "INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id " +
         "LEFT JOIN sys.extended_properties p ON p.major_id = c.object_id AND p.minor_id = c.column_id AND p.name = 'MS_Description' " +
@@ -72,12 +73,20 @@ public partial class Tools
         "  AND tp.name = @TableName " +
         "GROUP BY fk.name, tp.schema_id, tp.name, tr.schema_id, tr.name";
 
+    private const string PrimaryKeyQuery =
+        "SELECT kcu.column_name, kcu.ORDINAL_POSITION as ordinal_position, kcu.CONSTRAINT_NAME " +
+        "FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS tc " +
+        "INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME " +
+        "WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY' AND kcu.table_name = @TableName " +
+        "AND (kcu.TABLE_SCHEMA = @TableSchema OR @TableSchema IS NULL) " +
+        "ORDER BY kcu.ORDINAL_POSITION ASC";
+
     [McpServerTool(
         Title = "Describe Table",
         ReadOnly = true,
         Idempotent = true,
         Destructive = false),
-        Description("Returns the schema of a SQL Server table, including columns, indexes, constraints, and foreign keys.")]
+        Description("Returns the schema of a SQL Server table, including columns, indexes, primary key, constraints, and foreign keys.")]
     public async Task<DbOperationResult> DescribeTable(
         [Description("Name of the table, optionally prefixed with the schema (e.g. dbo.mytable)")] string name)
     {
@@ -118,10 +127,10 @@ public partial class Tools
                 {
                     tableInfoCommand.CommandText = TableInfoQuery;
 
-                    tableInfoCommand.Parameters.Add(new SqlParameter("@TableName", System.Data.SqlDbType.NVarChar) { Value = name });
-                    tableInfoCommand.Parameters.Add(new SqlParameter("@TableSchema", System.Data.SqlDbType.NVarChar) { Value = schema ?? DBNull.Value as object });
+                    tableInfoCommand.Parameters.Add(new SqlParameter("@TableName", SqlDbType.NVarChar) { Value = name });
+                    tableInfoCommand.Parameters.Add(new SqlParameter("@TableSchema", SqlDbType.NVarChar) { Value = schema ?? DBNull.Value as object });
 
-                    await using (SqlDataReader reader = await tableInfoCommand.ExecuteReaderAsync())
+                    await using (SqlDataReader reader = await tableInfoCommand.ExecuteReaderAsync(CommandBehavior.SingleResult))
                     {
                         if (await reader.ReadAsync())
                         {
@@ -146,15 +155,33 @@ public partial class Tools
                 {
                     columnsCommand.CommandText = ColumnsQuery;
 
-                    columnsCommand.Parameters.Add(new SqlParameter("@TableName", System.Data.SqlDbType.NVarChar) { Value = name });
-                    columnsCommand.Parameters.Add(new SqlParameter("@TableSchema", System.Data.SqlDbType.NVarChar) { Value = schema ?? DBNull.Value as object });
+                    columnsCommand.Parameters.Add(new SqlParameter("@TableName", SqlDbType.NVarChar) { Value = name });
+                    columnsCommand.Parameters.Add(new SqlParameter("@TableSchema", SqlDbType.NVarChar) { Value = schema ?? DBNull.Value as object });
 
                     List<object> columns = new List<object>();
 
-                    await using (SqlDataReader columnsReader = await columnsCommand.ExecuteReaderAsync())
+                    await using (SqlDataReader columnsReader = await columnsCommand.ExecuteReaderAsync(CommandBehavior.SingleResult))
                     {
                         while (await columnsReader.ReadAsync())
                         {
+                            int defaultObjectID = (int) columnsReader["default_object_id"];
+                            string? defaultValue = null;
+
+                            if (defaultObjectID != 0)
+                            {
+                                object? defaultValueObj = columnsReader["default_value"];
+
+                                if (defaultValueObj != null)
+                                {
+                                    defaultValue = defaultValueObj as string;
+                                }
+
+                                if (string.IsNullOrWhiteSpace(defaultValue))
+                                {
+                                    defaultValue = "<<MCP warning: Set, but unable to retrieve>>";
+                                }
+                            }
+
                             columns.Add(new
                             {
                                 name = columnsReader["name"],
@@ -163,7 +190,9 @@ public partial class Tools
                                 precision = columnsReader["precision"],
                                 scale = columnsReader["scale"],
                                 nullable = (bool)columnsReader["nullable"],
-                                description = columnsReader["description"] is DBNull ? null : columnsReader["description"]
+                                is_identity = (bool)columnsReader["is_identity"],
+                                description = columnsReader["description"] is DBNull ? null : columnsReader["description"],
+                                default_value = defaultValue
                             });
                         }
                     }
@@ -171,16 +200,41 @@ public partial class Tools
                     result["columns"] = columns;
                 }
 
+                await using (SqlCommand primarykeyCommand = connection.CreateCommand())
+                {
+                    primarykeyCommand.CommandText = PrimaryKeyQuery;
+
+                    primarykeyCommand.Parameters.Add(new SqlParameter("@TableName", SqlDbType.NVarChar) { Value = name });
+                    primarykeyCommand.Parameters.Add(new SqlParameter("@TableSchema", SqlDbType.NVarChar) { Value = schema ?? DBNull.Value as object });
+
+                    List<object> primaryKeyColumns = new List<object>();
+
+                    await using (SqlDataReader primaryKeyReader = await primarykeyCommand.ExecuteReaderAsync(CommandBehavior.SingleResult))
+                    {
+                        while (await primaryKeyReader.ReadAsync())
+                        {
+                            primaryKeyColumns.Add(new
+                            {
+                                column_name = primaryKeyReader["column_name"],
+                                ordinal_position = primaryKeyReader["ordinal_position"],
+                                constraint_name = primaryKeyReader["constraint_name"]
+                            });
+                        }
+                    }
+
+                    result["primaryKeyColumns"] = primaryKeyColumns;
+                }
+
                 await using (SqlCommand indexesCommand = connection.CreateCommand())
                 {
                     indexesCommand.CommandText = IndexesQuery;
 
-                    indexesCommand.Parameters.Add(new SqlParameter("@TableName", System.Data.SqlDbType.NVarChar) { Value = name });
-                    indexesCommand.Parameters.Add(new SqlParameter("@TableSchema", System.Data.SqlDbType.NVarChar) { Value = schema ?? DBNull.Value as object });
+                    indexesCommand.Parameters.Add(new SqlParameter("@TableName", SqlDbType.NVarChar) { Value = name });
+                    indexesCommand.Parameters.Add(new SqlParameter("@TableSchema", SqlDbType.NVarChar) { Value = schema ?? DBNull.Value as object });
 
                     List<object> indexes = new List<object>();
 
-                    await using (SqlDataReader indexesReader = await indexesCommand.ExecuteReaderAsync())
+                    await using (SqlDataReader indexesReader = await indexesCommand.ExecuteReaderAsync(CommandBehavior.SingleResult))
                     {
                         while (await indexesReader.ReadAsync())
                         {
@@ -201,12 +255,12 @@ public partial class Tools
                 {
                     constraintsCommand.CommandText = ConstraintsQuery;
 
-                    constraintsCommand.Parameters.Add(new SqlParameter("@TableName", System.Data.SqlDbType.NVarChar) { Value = name });
-                    constraintsCommand.Parameters.Add(new SqlParameter("@TableSchema", System.Data.SqlDbType.NVarChar) { Value = schema ?? DBNull.Value as object });
+                    constraintsCommand.Parameters.Add(new SqlParameter("@TableName", SqlDbType.NVarChar) { Value = name });
+                    constraintsCommand.Parameters.Add(new SqlParameter("@TableSchema", SqlDbType.NVarChar) { Value = schema ?? DBNull.Value as object });
 
                     List<object> constraints = new List<object>();
 
-                    await using (SqlDataReader constraintsReader = await constraintsCommand.ExecuteReaderAsync())
+                    await using (SqlDataReader constraintsReader = await constraintsCommand.ExecuteReaderAsync(CommandBehavior.SingleResult))
                     {
                         while (await constraintsReader.ReadAsync())
                         {
@@ -226,12 +280,12 @@ public partial class Tools
                 {
                     foreignKeysCommand.CommandText = ForeignKeysQuery;
 
-                    foreignKeysCommand.Parameters.Add(new SqlParameter("@TableName", System.Data.SqlDbType.NVarChar) { Value = name });
-                    foreignKeysCommand.Parameters.Add(new SqlParameter("@TableSchema", System.Data.SqlDbType.NVarChar) { Value = schema ?? DBNull.Value as object });
+                    foreignKeysCommand.Parameters.Add(new SqlParameter("@TableName", SqlDbType.NVarChar) { Value = name });
+                    foreignKeysCommand.Parameters.Add(new SqlParameter("@TableSchema", SqlDbType.NVarChar) { Value = schema ?? DBNull.Value as object });
 
                     List<object> foreignKeys = new List<object>();
 
-                    await using (SqlDataReader foreignKeysReader = await foreignKeysCommand.ExecuteReaderAsync())
+                    await using (SqlDataReader foreignKeysReader = await foreignKeysCommand.ExecuteReaderAsync(CommandBehavior.SingleResult))
                     {
                         while (await foreignKeysReader.ReadAsync())
                         {
