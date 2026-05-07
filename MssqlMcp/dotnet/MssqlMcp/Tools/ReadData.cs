@@ -16,9 +16,11 @@ public partial class Tools
         Idempotent = true,
         Destructive = false),
         Description("Executes a SQL SELECT query against the SQL Database and returns the results. " +
-                     "The query must start with SELECT and cannot contain any destructive SQL operations for security reasons.")]
+                     "A stored procedure can also be invoked (e.g. EXEC dbo.MyProcedure @param = 1) and its result set will be returned. " +
+                     "Multiple result sets may be returned. " +
+                     "Database schema information can also be queried.")]
     public async Task<DbOperationResult> ReadData(
-        [Description("SQL SELECT query to execute")] string sql)
+        [Description("SQL SELECT query, or EXEC statement invoking a stored procedure")] string sql)
     {
         if (string.IsNullOrWhiteSpace(sql))
         {
@@ -42,7 +44,7 @@ public partial class Tools
         {
             await using (connection)
             {
-                List<Dictionary<string, object?>> results = new List<Dictionary<string, object?>>();
+                Dictionary<string, List<Dictionary<string, object?>>> resultSets = new Dictionary<string, List<Dictionary<string, object?>>>();
 
                 await using (SqlCommand queryCommand = connection.CreateCommand())
                 {
@@ -50,21 +52,33 @@ public partial class Tools
 
                     await using (SqlDataReader reader = await queryCommand.ExecuteReaderAsync())
                     {
-                        while (await reader.ReadAsync())
-                        {
-                            Dictionary<string, object?> row = new Dictionary<string, object?>(reader.FieldCount);
+                        int currentResultSet = 0;
 
-                            for (int i = 0; i < reader.FieldCount; i++)
+                        do
+                        {
+                            List<Dictionary<string, object?>> rows = new List<Dictionary<string, object?>>();
+
+                            while (await reader.ReadAsync())
                             {
-                                row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                Dictionary<string, object?> row = new Dictionary<string, object?>(reader.FieldCount);
+
+                                for (int i = 0; i < reader.FieldCount; i++)
+                                {
+                                    row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                }
+
+                                rows.Add(row);
                             }
 
-                            results.Add(row);
+                            resultSets.Add($"result_set_{currentResultSet}", rows);
+
+                            currentResultSet++;
                         }
+                        while (await reader.NextResultAsync());
                     }
                 }
 
-                return new DbOperationResult(success: true, data: results);
+                return new DbOperationResult(success: true, data: resultSets);
             }
         }
         catch (Exception ex)
