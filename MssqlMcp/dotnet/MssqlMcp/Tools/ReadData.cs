@@ -45,36 +45,42 @@ public partial class Tools
             {
                 Dictionary<string, List<Dictionary<string, object?>>> resultSets = new Dictionary<string, List<Dictionary<string, object?>>>();
 
-                await using (SqlCommand queryCommand = connection.CreateCommand())
+                await using (SqlTransaction transaction = (SqlTransaction)await connection.BeginTransactionAsync())
                 {
-                    queryCommand.CommandText = sql;
-
-                    await using (SqlDataReader reader = await queryCommand.ExecuteReaderAsync())
+                    await using (SqlCommand queryCommand = connection.CreateCommand())
                     {
-                        int currentResultSet = 0;
+                        queryCommand.Transaction = transaction;
+                        queryCommand.CommandText = sql;
 
-                        do
+                        await using (SqlDataReader reader = await queryCommand.ExecuteReaderAsync())
                         {
-                            List<Dictionary<string, object?>> rows = new List<Dictionary<string, object?>>();
+                            int currentResultSet = 0;
 
-                            while (await reader.ReadAsync())
+                            do
                             {
-                                Dictionary<string, object?> row = new Dictionary<string, object?>(reader.FieldCount);
+                                List<Dictionary<string, object?>> rows = new List<Dictionary<string, object?>>();
 
-                                for (int i = 0; i < reader.FieldCount; i++)
+                                while (await reader.ReadAsync())
                                 {
-                                    row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                    Dictionary<string, object?> row = new Dictionary<string, object?>(reader.FieldCount);
+
+                                    for (int i = 0; i < reader.FieldCount; i++)
+                                    {
+                                        row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                    }
+
+                                    rows.Add(row);
                                 }
 
-                                rows.Add(row);
+                                resultSets.Add($"result_set_{currentResultSet}", rows);
+
+                                currentResultSet++;
                             }
-
-                            resultSets.Add($"result_set_{currentResultSet}", rows);
-
-                            currentResultSet++;
+                            while (await reader.NextResultAsync());
                         }
-                        while (await reader.NextResultAsync());
                     }
+
+                    await transaction.RollbackAsync();
                 }
 
                 return new DbOperationResult(success: true, data: resultSets);
