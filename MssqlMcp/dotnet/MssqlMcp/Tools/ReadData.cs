@@ -16,11 +16,10 @@ public partial class Tools
         Idempotent = true,
         Destructive = false),
         Description("Executes a SQL SELECT query against the SQL Database and returns the results. " +
-                     "A stored procedure can also be invoked (e.g. EXEC dbo.MyProcedure @param = 1) and its result set will be returned. " +
                      "Multiple result sets may be returned. " +
                      "Database schema information can also be queried.")]
     public async Task<DbOperationResult> ReadData(
-        [Description("SQL SELECT query, or EXEC statement invoking a stored procedure")] string sql)
+        [Description("SQL SELECT query")] string sql)
     {
         if (string.IsNullOrWhiteSpace(sql))
         {
