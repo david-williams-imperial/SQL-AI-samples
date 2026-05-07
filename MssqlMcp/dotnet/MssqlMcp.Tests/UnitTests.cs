@@ -238,11 +238,12 @@ namespace MssqlMcp.Tests
 
         private static List<Dictionary<string, object?>> ToRows(object? value)
         {
-            List<Dictionary<string, object?>>? rows = value as List<Dictionary<string, object?>>;
+            Dictionary<string, List<Dictionary<string, object?>>>? resultSets = value as Dictionary<string, List<Dictionary<string, object?>>>;
 
-            Assert.NotNull(rows);
+            Assert.NotNull(resultSets);
+            Assert.True(resultSets.ContainsKey("result_set_0"));
 
-            return rows;
+            return resultSets["result_set_0"];
         }
 
         private static object FindColumn(List<object> columns, string name)
