@@ -20,7 +20,11 @@ public partial class Tools
         "WHERE t.name = @TableName AND (s.name = @TableSchema OR @TableSchema IS NULL)";
 
     private const string ColumnsQuery =
-        "SELECT c.[name], ty.[name] AS [type], c.max_length AS [length], c.[precision], c.scale, c.is_nullable AS nullable, c.is_identity, p.[value] AS [description], c.default_object_id, object_definition(c.default_object_id) as default_value " +
+        "SELECT c.[name], ty.[name] AS [type], c.[max_length] AS [length_bytes], " +
+        "CASE WHEN c.[max_length] = -1 AND ty.[name] LIKE N'%char%' THEN N'MAX' " +
+        "WHEN ty.[name] IN (N'nvarchar', N'nchar') THEN CAST ((c.[max_length] / 2) as nvarchar(50)) " +
+        "WHEN ty.[name] IN (N'varchar', N'char') THEN CAST (c.[max_length] as nvarchar(50)) ELSE N'N/A' END As [string_length], " +
+        "c.[precision], c.scale, c.is_nullable AS nullable, c.is_identity, p.[value] AS [description], c.default_object_id, object_definition(c.default_object_id) as default_value " +
         "FROM sys.columns c " +
         "INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id " +
         "LEFT JOIN sys.extended_properties p ON p.major_id = c.object_id AND p.minor_id = c.column_id AND p.name = 'MS_Description' " +
@@ -194,7 +198,8 @@ public partial class Tools
                             {
                                 name = columnsReader["name"],
                                 type = columnsReader["type"],
-                                length = columnsReader["length"],
+                                length_bytes = columnsReader["length_bytes"],
+                                string_length = columnsReader["string_length"],
                                 precision = columnsReader["precision"],
                                 scale = columnsReader["scale"],
                                 nullable = (bool)columnsReader["nullable"],
