@@ -1,4 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <!-- https://go.microsoft.com/fwlink/?LinkID=208121. -->
 <Project>
+  <PropertyGroup>
+    <History>True|2026-07-28T20:57:27.7999578Z||;True|2026-05-09T14:26:11.1073418+01:00||;True|2026-05-07T22:02:57.4692477+01:00||;</History>
+    <LastFailureDetails />
+  </PropertyGroup>
 </Project>
