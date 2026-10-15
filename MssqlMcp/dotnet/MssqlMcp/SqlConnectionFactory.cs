@@ -45,7 +45,7 @@ public class SqlConnectionFactory : ISqlConnectionFactory
     /// </summary>
     /// <returns>Connection string from environment configuration.</returns>
     /// <exception cref="InvalidOperationException">If the environment variable 'CONNECTION_STRING' has not been set.</exception>
-    private static string GetConnectionString()
+    public string GetConnectionString()
     {
         string? connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
 
@@ -66,7 +66,7 @@ public class SqlConnectionFactory : ISqlConnectionFactory
     /// Get connection string for connection with read-only permissions.
     /// </summary>
     /// <returns>Connection string from environment configuration.</returns>
-    private static string GetReadOnlyConnectionString()
+    public string GetReadOnlyConnectionString()
     {
         string? connectionString = Environment.GetEnvironmentVariable("READ_CONNECTION_STRING");
 

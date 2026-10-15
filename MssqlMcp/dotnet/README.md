@@ -15,6 +15,7 @@ This project is a .NET 8 console application implementing a Model Context Protoc
   - InsertData: Insert data into tables.
   - ReadData: Read/query data from tables.
   - UpdateData: Update values in tables.
+  - GetSqlServerInfo: Get server, authentication, version, and database details for each connection string.
 - **Logging**: Console logging using Microsoft.Extensions.Logging.
 - **Unit Tests**: xUnit-based unit tests for all major components.
 

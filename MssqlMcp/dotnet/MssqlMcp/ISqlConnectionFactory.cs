@@ -22,4 +22,17 @@ public interface ISqlConnectionFactory
     /// </summary>
     /// <returns><see cref="SqlConnection"/> in the <see cref="ConnectionState.Open"/> state.</returns>
     Task<SqlConnection> GetOpenReadOnlyConnectionAsync();
+
+    /// <summary>
+    /// Get connection string for connection with write permissions.
+    /// </summary>
+    /// <returns>Connection string from environment configuration.</returns>
+    /// <exception cref="InvalidOperationException">If the environment variable 'CONNECTION_STRING' has not been set.</exception>
+    string GetConnectionString();
+
+    /// <summary>
+    /// Get connection string for connection with read-only permissions.
+    /// </summary>
+    /// <returns>Connection string from environment configuration.</returns>
+    string GetReadOnlyConnectionString();
 }
