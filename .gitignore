@@ -23,3 +23,4 @@ AzureSQLPromptFlowSamples/src/sql-promptflow-demo/promptflow_v2/.promptflow/
 AzureSQLPromptFlowSamples/src/sql-promptflow-demo/promptflow_v2/__pycache__/
 .vs/
 /.claude/settings.local.json
+/MssqlMcp/dotnet/MssqlMcp/Properties/PublishProfiles/FolderProfile.pubxml.user
