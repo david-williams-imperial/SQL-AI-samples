@@ -3,7 +3,6 @@
 
 using System.ComponentModel;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
 namespace Mssql.McpServer;
@@ -16,6 +15,7 @@ public partial class Tools
         Destructive = false),
         Description("Creates a new table in the SQL Database. Expects a valid CREATE TABLE SQL statement as input.")]
     public async Task<DbOperationResult> CreateTable(
+        [Description(DatabaseKeyDescription)] string databaseKey,
         [Description("CREATE TABLE SQL statement")] string sql)
     {
         if (string.IsNullOrWhiteSpace(sql))
@@ -23,38 +23,16 @@ public partial class Tools
             return new DbOperationResult(success: false, error: "SQL parameter cannot be null/empty/whitespace");
         }
 
-        SqlConnection connection;
-
-        try
+        return await ExecuteAsync(databaseKey, readOnly: false, nameof(CreateTable), async connection =>
         {
-            connection = await _connectionFactory.GetOpenConnectionAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to connect to database: {Message}", ex.Message);
-
-            return new DbOperationResult(success: false, error: $"Failed to connect to database: {ex.Message}");
-        }
-
-        try
-        {
-            await using (connection)
+            await using (SqlCommand createCommand = connection.CreateCommand())
             {
-                await using (SqlCommand createCommand = connection.CreateCommand())
-                {
-                    createCommand.CommandText = sql;
+                createCommand.CommandText = sql;
 
-                    await createCommand.ExecuteNonQueryAsync();
+                await createCommand.ExecuteNonQueryAsync();
 
-                    return new DbOperationResult(success: true);
-                }
+                return new DbOperationResult(success: true);
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "CreateTable failed: {Message}", ex.Message);
-
-            return new DbOperationResult(success: false, error: ex.Message);
-        }
+        });
     }
 }

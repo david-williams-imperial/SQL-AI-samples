@@ -8,15 +8,18 @@ namespace Mssql.McpServer;
 /// <summary>
 /// Factory for <see cref="SqlConnection"/>.
 /// </summary>
-public class SqlConnectionFactory : ISqlConnectionFactory
+public class SqlConnectionFactory(IDatabaseRegistry databaseRegistry) : ISqlConnectionFactory
 {
+    private readonly IDatabaseRegistry _databaseRegistry = databaseRegistry;
+
     /// <summary>
     /// Gets an open <see cref="SqlConnection"/> with write permissions.
     /// </summary>
+    /// <param name="databaseKey">Key of the database to connect to.</param>
     /// <returns><see cref="SqlConnection"/> in the <see cref="ConnectionState.Open"/> state.</returns>
-    public async Task<SqlConnection> GetOpenConnectionAsync()
+    public async Task<SqlConnection> GetOpenConnectionAsync(string databaseKey)
     {
-        string connectionString = GetConnectionString();
+        string connectionString = await GetConnectionStringAsync(databaseKey);
 
         SqlConnection conn = new SqlConnection(connectionString);
 
@@ -28,10 +31,11 @@ public class SqlConnectionFactory : ISqlConnectionFactory
     /// <summary>
     /// Gets an open <see cref="SqlConnection"/> with read-only permissions.
     /// </summary>
+    /// <param name="databaseKey">Key of the database to connect to.</param>
     /// <returns><see cref="SqlConnection"/> in the <see cref="ConnectionState.Open"/> state.</returns>
-    public async Task<SqlConnection> GetOpenReadOnlyConnectionAsync()
+    public async Task<SqlConnection> GetOpenReadOnlyConnectionAsync(string databaseKey)
     {
-        string connectionString = GetReadOnlyConnectionString();
+        string connectionString = await GetReadOnlyConnectionStringAsync(databaseKey);
 
         SqlConnection conn = new SqlConnection(connectionString);
 
@@ -43,48 +47,76 @@ public class SqlConnectionFactory : ISqlConnectionFactory
     /// <summary>
     /// Get connection string for connection with write permissions.
     /// </summary>
-    /// <returns>Connection string from environment configuration.</returns>
-    /// <exception cref="InvalidOperationException">If the environment variable 'CONNECTION_STRING' has not been set.</exception>
-    public string GetConnectionString()
+    /// <param name="databaseKey">Key of the database.</param>
+    /// <returns>Connection string from the database registry.</returns>
+    /// <exception cref="InvalidOperationException">If the key is not configured, or has no write connection string.</exception>
+    public async Task<string> GetConnectionStringAsync(string databaseKey)
     {
-        string? connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
+        DatabaseRegistration registration = await GetRegistrationAsync(databaseKey);
 
-        if (string.IsNullOrWhiteSpace(connectionString))
+        if (string.IsNullOrWhiteSpace(registration.WriteConnectionString))
         {
-            throw new InvalidOperationException(
-                "Connection string is not set in the environment variable 'CONNECTION_STRING'." + Environment.NewLine +
-                "HINT: Set the environment variable before starting the server, e.g.:" + Environment.NewLine +
-                "  SET CONNECTION_STRING=Server=.;Database=test;Trusted_Connection=True;TrustServerCertificate=True");
+            throw new InvalidOperationException($"Database key '{databaseKey}' is read-only (no write connection string is configured).");
         }
 
-        connectionString = AdjustConnectionString(connectionString, false);
-
-        return connectionString;
+        return AdjustConnectionString(registration.WriteConnectionString, false);
     }
 
     /// <summary>
     /// Get connection string for connection with read-only permissions.
     /// </summary>
-    /// <returns>Connection string from environment configuration.</returns>
-    public string GetReadOnlyConnectionString()
+    /// <param name="databaseKey">Key of the database.</param>
+    /// <returns>Connection string from the database registry.</returns>
+    /// <exception cref="InvalidOperationException">If the key is not configured, or has no read-only connection string.</exception>
+    public async Task<string> GetReadOnlyConnectionStringAsync(string databaseKey)
     {
-        string? connectionString = Environment.GetEnvironmentVariable("READ_CONNECTION_STRING");
+        DatabaseRegistration registration = await GetRegistrationAsync(databaseKey);
 
-        if (string.IsNullOrWhiteSpace(connectionString))
+        if (string.IsNullOrWhiteSpace(registration.ReadOnlyConnectionString))
         {
-            throw new InvalidOperationException(
-                "A read-only connection string is not set in the environment variable 'READ_CONNECTION_STRING'." + Environment.NewLine +
-                "HINT: Set the environment variable before starting the MCP server, e.g.:" + Environment.NewLine +
-                "  SET READ_CONNECTION_STRING=Server=.;Database=test;Trusted_Connection=True;TrustServerCertificate=True");
+            throw new InvalidOperationException($"Database key '{databaseKey}' has no read-only connection string configured.");
         }
 
-        connectionString = AdjustConnectionString(connectionString, true);
-
-        return connectionString;
+        return AdjustConnectionString(registration.ReadOnlyConnectionString, true);
     }
 
     /// <summary>
-    /// Adds custom properties to a connection string read from the environment.
+    /// Gets a database from the registry.
+    /// </summary>
+    /// <param name="databaseKey">Key of the database.</param>
+    /// <returns>The database.</returns>
+    /// <exception cref="InvalidOperationException">If the key is not configured.</exception>
+    /// <exception cref="DatabaseInactiveException">If the database is inactive.</exception>
+    private async Task<DatabaseRegistration> GetRegistrationAsync(string databaseKey)
+    {
+        if (string.IsNullOrWhiteSpace(databaseKey))
+        {
+            throw new InvalidOperationException("A database key is required.");
+        }
+
+        DatabaseRegistration? registration = await _databaseRegistry.GetDatabaseAsync(databaseKey);
+
+        if (registration != null && !registration.IsActive)
+        {
+            throw new DatabaseInactiveException(databaseKey);
+        }
+
+        if (registration == null)
+        {
+            IReadOnlyList<string> keys = await _databaseRegistry.GetDatabaseKeysAsync(activeOnly: true);
+
+            string configuredKeys = keys.Count == 0
+                ? "No databases are configured."
+                : $"Configured keys: {string.Join(", ", keys)}.";
+
+            throw new InvalidOperationException($"Database key '{databaseKey}' was not found. {configuredKeys}");
+        }
+
+        return registration;
+    }
+
+    /// <summary>
+    /// Adds custom properties to a connection string read from the database registry.
     /// </summary>
     /// <param name="connectionString">Connection string to adjust.</param>
     /// <param name="isReadOnly">Is this a read-only connection?</param>

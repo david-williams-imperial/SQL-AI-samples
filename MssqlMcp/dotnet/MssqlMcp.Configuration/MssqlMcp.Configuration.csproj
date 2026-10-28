@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <RootNamespace>Mssql.McpServer.Configuration</RootNamespace>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <Company>Microsoft</Company>
+        <Product>MSSQL MCP Server</Product>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+        <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
+    </ItemGroup>
+
+</Project>

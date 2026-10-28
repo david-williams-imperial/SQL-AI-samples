@@ -9,6 +9,16 @@ namespace Mssql.McpServer;
 public class DbOperationResult(bool success, string? error = null, int? rowsAffected = null, object? data = null)
 {
     /// <summary>
+    /// Gets the key of the database the operation ran against, if applicable.
+    /// </summary>
+    public string? DatabaseKey { get; internal set; }
+
+    /// <summary>
+    /// Gets the name of the database the operation ran against, if a connection was made.
+    /// </summary>
+    public string? DatabaseName { get; internal set; }
+
+    /// <summary>
     /// Gets a value indicating whether the database operation was successful.
     /// </summary>
     public bool Success { get; } = success;

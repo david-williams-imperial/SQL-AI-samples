@@ -37,45 +37,60 @@ public partial class Tools
         "WHERE d.database_id = DB_ID()";
 
     /// <summary>
-    /// Returns server, authentication, version, and database details for each configured connection string.
+    /// Returns server, authentication, version, and database details for each of a database's connection strings.
     /// </summary>
+    /// <param name="databaseKey">Key of the database.</param>
     /// <returns>Result containing one entry per connection string.</returns>
     [McpServerTool(
         Title = "Get SQL Server Info",
         ReadOnly = true,
         Idempotent = true,
         Destructive = false),
-        Description("Returns the server, authentication, SQL Server version, and database details for each of the MCP server's connection strings (read-only and write).")]
-    public async Task<DbOperationResult> GetSqlServerInfo()
+        Description("Returns the server, authentication, SQL Server version, and database details for each of a database's connection strings (read-only and write).")]
+    public async Task<DbOperationResult> GetSqlServerInfo(
+        [Description(DatabaseKeyDescription)] string databaseKey)
     {
-        Task<Dictionary<string, object?>> readOnlyTask = GetConnectionInfoAsync("read_only", "READ_CONNECTION_STRING", _connectionFactory.GetReadOnlyConnectionString);
-        Task<Dictionary<string, object?>> writeTask = GetConnectionInfoAsync("write", "CONNECTION_STRING", _connectionFactory.GetConnectionString);
+        if (string.IsNullOrWhiteSpace(databaseKey))
+        {
+            return new DbOperationResult(success: false, error: "Database key parameter cannot be null/empty/whitespace");
+        }
 
-        Dictionary<string, object?>[] connections = await Task.WhenAll(readOnlyTask, writeTask);
+        Task<Dictionary<string, object?>> readOnlyTask = GetConnectionInfoAsync("read_only", () => _connectionFactory.GetReadOnlyConnectionStringAsync(databaseKey));
+        Task<Dictionary<string, object?>> writeTask = GetConnectionInfoAsync("write", () => _connectionFactory.GetConnectionStringAsync(databaseKey));
+
+        Dictionary<string, object?>[] connections;
+
+        try
+        {
+            connections = await Task.WhenAll(readOnlyTask, writeTask);
+        }
+        catch (DatabaseInactiveException ex)
+        {
+            return new DbOperationResult(success: false, error: ex.Message) { DatabaseKey = databaseKey };
+        }
 
         bool anyConnected = connections.Any(c => c["error"] == null);
 
         if (!anyConnected)
         {
-            return new DbOperationResult(success: false, error: "Unable to connect using any connection string.", data: connections);
+            return new DbOperationResult(success: false, error: "Unable to connect using any connection string.", data: connections) { DatabaseKey = databaseKey };
         }
 
-        return new DbOperationResult(success: true, data: connections);
+        return new DbOperationResult(success: true, data: connections) { DatabaseKey = databaseKey };
     }
 
     /// <summary>
     /// Describes a single connection string and queries the server it points to.
     /// </summary>
     /// <param name="name">Friendly name for the connection.</param>
-    /// <param name="environmentVariable">Environment variable the connection string is read from.</param>
     /// <param name="getConnectionString">Function returning the connection string.</param>
     /// <returns>Connection details, including an error message if the server could not be queried.</returns>
-    private async Task<Dictionary<string, object?>> GetConnectionInfoAsync(string name, string environmentVariable, Func<string> getConnectionString)
+    /// <exception cref="DatabaseInactiveException">If the database is inactive.</exception>
+    private async Task<Dictionary<string, object?>> GetConnectionInfoAsync(string name, Func<Task<string>> getConnectionString)
     {
         Dictionary<string, object?> result = new Dictionary<string, object?>
         {
             ["name"] = name,
-            ["environment_variable"] = environmentVariable,
             ["error"] = null
         };
 
@@ -83,13 +98,13 @@ public partial class Tools
 
         try
         {
-            connectionString = getConnectionString();
+            connectionString = await getConnectionString();
 
             result["connection_string"] = DescribeConnectionString(connectionString);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not DatabaseInactiveException)
         {
-            _logger.LogError(ex, "GetSqlServerInfo failed to read {EnvironmentVariable}: {Message}", environmentVariable, ex.Message);
+            _logger.LogError(ex, "GetSqlServerInfo failed to read the {Name} connection string: {Message}", name, ex.Message);
 
             result["error"] = ex.Message;
 
@@ -147,7 +162,7 @@ public partial class Tools
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "GetSqlServerInfo failed for {EnvironmentVariable}: {Message}", environmentVariable, ex.Message);
+            _logger.LogError(ex, "GetSqlServerInfo failed for the {Name} connection string: {Message}", name, ex.Message);
 
             result["error"] = ex.Message;
         }

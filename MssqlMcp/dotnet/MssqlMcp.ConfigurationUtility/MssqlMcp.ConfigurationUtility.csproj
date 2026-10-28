@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <UseWPF>true</UseWPF>
+        <RootNamespace>Mssql.McpServer.ConfigurationUtility</RootNamespace>
+        <AssemblyName>MssqlMcp.ConfigurationUtility</AssemblyName>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <Company>Microsoft</Company>
+        <Product>MSSQL MCP Server Configuration Utility</Product>
+        <Version>1.0.0.0</Version>
+        <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+        <ApplicationIcon>Images\MssqlMcpConfiguration.ico</ApplicationIcon>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Resource Include="Images\*.ico" />
+        <None Remove="Images\*.ico" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\MssqlMcp.Configuration\MssqlMcp.Configuration.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Mssql.McpServer.Configuration" />
+    </ItemGroup>
+
+</Project>

@@ -32,4 +32,12 @@
         <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\MssqlMcp.Configuration\MssqlMcp.Configuration.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Mssql.McpServer.Configuration" />
+    </ItemGroup>
+
 </Project>

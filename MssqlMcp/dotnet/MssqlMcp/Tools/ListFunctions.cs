@@ -3,7 +3,6 @@
 
 using System.ComponentModel;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
 namespace Mssql.McpServer;
@@ -27,54 +26,33 @@ public partial class Tools
         Idempotent = true,
         Destructive = false),
         Description("Lists all user-defined functions (scalar, inline table-valued, and multi-statement table-valued) in the SQL Database.")]
-    public async Task<DbOperationResult> ListFunctions()
+    public async Task<DbOperationResult> ListFunctions(
+        [Description(DatabaseKeyDescription)] string databaseKey)
     {
-        SqlConnection connection;
-
-        try
+        return await ExecuteAsync(databaseKey, readOnly: true, nameof(ListFunctions), async connection =>
         {
-            connection = await _connectionFactory.GetOpenReadOnlyConnectionAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to connect to database: {Message}", ex.Message);
-
-            return new DbOperationResult(success: false, error: $"Failed to connect to database: {ex.Message}");
-        }
-
-        try
-        {
-            await using (connection)
+            await using (SqlCommand listFunctionsCommand = connection.CreateCommand())
             {
-                await using (SqlCommand listFunctionsCommand = connection.CreateCommand())
+                listFunctionsCommand.CommandText = ListFunctionsQuery;
+
+                List<Dictionary<string, object>> functions = new List<Dictionary<string, object>>();
+
+                await using (SqlDataReader reader = await listFunctionsCommand.ExecuteReaderAsync())
                 {
-                    listFunctionsCommand.CommandText = ListFunctionsQuery;
-
-                    List<Dictionary<string, object>> functions = new List<Dictionary<string, object>>();
-
-                    await using (SqlDataReader reader = await listFunctionsCommand.ExecuteReaderAsync())
+                    while (await reader.ReadAsync())
                     {
-                        while (await reader.ReadAsync())
+                        Dictionary<string, object> function = new Dictionary<string, object>
                         {
-                            Dictionary<string, object> function = new Dictionary<string, object>
-                            {
-                                ["name"] = $"{reader.GetString(0)}.{reader.GetString(1)}",
-                                ["type"] = reader.GetString(2)
-                            };
+                            ["name"] = $"{reader.GetString(0)}.{reader.GetString(1)}",
+                            ["type"] = reader.GetString(2)
+                        };
 
-                            functions.Add(function);
-                        }
+                        functions.Add(function);
                     }
-
-                    return new DbOperationResult(success: true, data: functions);
                 }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "ListFunctions failed: {Message}", ex.Message);
 
-            return new DbOperationResult(success: false, error: ex.Message);
-        }
+                return new DbOperationResult(success: true, data: functions);
+            }
+        });
     }
 }

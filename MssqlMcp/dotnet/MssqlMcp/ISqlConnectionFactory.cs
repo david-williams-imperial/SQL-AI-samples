@@ -14,25 +14,30 @@ public interface ISqlConnectionFactory
     /// <summary>
     /// Gets an open <see cref="SqlConnection"/> with write permissions.
     /// </summary>
+    /// <param name="databaseKey">Key of the database to connect to.</param>
     /// <returns><see cref="SqlConnection"/> in the <see cref="ConnectionState.Open"/> state.</returns>
-    Task<SqlConnection> GetOpenConnectionAsync();
+    Task<SqlConnection> GetOpenConnectionAsync(string databaseKey);
 
     /// <summary>
     /// Gets an open <see cref="SqlConnection"/> with read-only permissions.
     /// </summary>
+    /// <param name="databaseKey">Key of the database to connect to.</param>
     /// <returns><see cref="SqlConnection"/> in the <see cref="ConnectionState.Open"/> state.</returns>
-    Task<SqlConnection> GetOpenReadOnlyConnectionAsync();
+    Task<SqlConnection> GetOpenReadOnlyConnectionAsync(string databaseKey);
 
     /// <summary>
     /// Get connection string for connection with write permissions.
     /// </summary>
-    /// <returns>Connection string from environment configuration.</returns>
-    /// <exception cref="InvalidOperationException">If the environment variable 'CONNECTION_STRING' has not been set.</exception>
-    string GetConnectionString();
+    /// <param name="databaseKey">Key of the database.</param>
+    /// <returns>Connection string from the database registry.</returns>
+    /// <exception cref="InvalidOperationException">If the key is not configured, or has no write connection string.</exception>
+    Task<string> GetConnectionStringAsync(string databaseKey);
 
     /// <summary>
     /// Get connection string for connection with read-only permissions.
     /// </summary>
-    /// <returns>Connection string from environment configuration.</returns>
-    string GetReadOnlyConnectionString();
+    /// <param name="databaseKey">Key of the database.</param>
+    /// <returns>Connection string from the database registry.</returns>
+    /// <exception cref="InvalidOperationException">If the key is not configured, or has no read-only connection string.</exception>
+    Task<string> GetReadOnlyConnectionStringAsync(string databaseKey);
 }

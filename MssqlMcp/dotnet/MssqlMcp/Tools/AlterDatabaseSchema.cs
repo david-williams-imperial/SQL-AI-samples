@@ -3,7 +3,6 @@
 
 using System.ComponentModel;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
 namespace Mssql.McpServer;
@@ -16,6 +15,7 @@ public partial class Tools
         Destructive = true),
         Description("Can be used to create, alter, or drop tables, indexes, views, etc. Expects a valid ALTER TABLE (or similar) SQL statement as input.")]
     public async Task<DbOperationResult> AlterDatabaseSchema(
+        [Description(DatabaseKeyDescription)] string databaseKey,
         [Description("SQL statement")] string sql)
     {
         if (string.IsNullOrWhiteSpace(sql))
@@ -23,38 +23,16 @@ public partial class Tools
             return new DbOperationResult(success: false, error: "SQL parameter cannot be null/empty/whitespace");
         }
 
-        SqlConnection connection;
-
-        try
+        return await ExecuteAsync(databaseKey, readOnly: false, nameof(AlterDatabaseSchema), async connection =>
         {
-            connection = await _connectionFactory.GetOpenConnectionAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to connect to database: {Message}", ex.Message);
-
-            return new DbOperationResult(success: false, error: $"Failed to connect to database: {ex.Message}");
-        }
-
-        try
-        {
-            await using (connection)
+            await using (SqlCommand alterCommand = connection.CreateCommand())
             {
-                await using (SqlCommand alterCommand = connection.CreateCommand())
-                {
-                    alterCommand.CommandText = sql;
+                alterCommand.CommandText = sql;
 
-                    int rowsAffected = await alterCommand.ExecuteNonQueryAsync();
+                int rowsAffected = await alterCommand.ExecuteNonQueryAsync();
 
-                    return new DbOperationResult(success: true, rowsAffected: rowsAffected);
-                }
+                return new DbOperationResult(success: true, rowsAffected: rowsAffected);
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "AlterTable failed: {Message}", ex.Message);
-
-            return new DbOperationResult(success: false, error: ex.Message);
-        }
+        });
     }
 }

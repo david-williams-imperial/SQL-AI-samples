@@ -3,7 +3,6 @@
 
 using System.ComponentModel;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
 namespace Mssql.McpServer;
@@ -22,48 +21,27 @@ public partial class Tools
         Idempotent = true,
         Destructive = false),
         Description("Lists all stored procedures in the SQL Database.")]
-    public async Task<DbOperationResult> ListStoredProcedures()
+    public async Task<DbOperationResult> ListStoredProcedures(
+        [Description(DatabaseKeyDescription)] string databaseKey)
     {
-        SqlConnection connection;
-
-        try
+        return await ExecuteAsync(databaseKey, readOnly: true, nameof(ListStoredProcedures), async connection =>
         {
-            connection = await _connectionFactory.GetOpenReadOnlyConnectionAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to connect to database: {Message}", ex.Message);
-
-            return new DbOperationResult(success: false, error: $"Failed to connect to database: {ex.Message}");
-        }
-
-        try
-        {
-            await using (connection)
+            await using (SqlCommand listStoredProceduresCommand = connection.CreateCommand())
             {
-                await using (SqlCommand listStoredProceduresCommand = connection.CreateCommand())
+                listStoredProceduresCommand.CommandText = ListStoredProceduresQuery;
+
+                List<string> storedProcedures = new List<string>();
+
+                await using (SqlDataReader reader = await listStoredProceduresCommand.ExecuteReaderAsync())
                 {
-                    listStoredProceduresCommand.CommandText = ListStoredProceduresQuery;
-
-                    List<string> storedProcedures = new List<string>();
-
-                    await using (SqlDataReader reader = await listStoredProceduresCommand.ExecuteReaderAsync())
+                    while (await reader.ReadAsync())
                     {
-                        while (await reader.ReadAsync())
-                        {
-                            storedProcedures.Add($"{reader.GetString(0)}.{reader.GetString(1)}");
-                        }
+                        storedProcedures.Add($"{reader.GetString(0)}.{reader.GetString(1)}");
                     }
-
-                    return new DbOperationResult(success: true, data: storedProcedures);
                 }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "ListStoredProcedures failed: {Message}", ex.Message);
 
-            return new DbOperationResult(success: false, error: ex.Message);
-        }
+                return new DbOperationResult(success: true, data: storedProcedures);
+            }
+        });
     }
 }

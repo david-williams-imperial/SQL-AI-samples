@@ -3,7 +3,6 @@
 
 using System.ComponentModel;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
 namespace Mssql.McpServer;
@@ -21,48 +20,27 @@ public partial class Tools
         Idempotent = true,
         Destructive = false),
         Description("Lists all views in the SQL Database.")]
-    public async Task<DbOperationResult> ListViews()
+    public async Task<DbOperationResult> ListViews(
+        [Description(DatabaseKeyDescription)] string databaseKey)
     {
-        SqlConnection connection;
-
-        try
+        return await ExecuteAsync(databaseKey, readOnly: true, nameof(ListViews), async connection =>
         {
-            connection = await _connectionFactory.GetOpenReadOnlyConnectionAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to connect to database: {Message}", ex.Message);
-
-            return new DbOperationResult(success: false, error: $"Failed to connect to database: {ex.Message}");
-        }
-
-        try
-        {
-            await using (connection)
+            await using (SqlCommand listViewsCommand = connection.CreateCommand())
             {
-                await using (SqlCommand listViewsCommand = connection.CreateCommand())
+                listViewsCommand.CommandText = ListViewsQuery;
+
+                List<string> views = new List<string>();
+
+                await using (SqlDataReader reader = await listViewsCommand.ExecuteReaderAsync())
                 {
-                    listViewsCommand.CommandText = ListViewsQuery;
-
-                    List<string> views = new List<string>();
-
-                    await using (SqlDataReader reader = await listViewsCommand.ExecuteReaderAsync())
+                    while (await reader.ReadAsync())
                     {
-                        while (await reader.ReadAsync())
-                        {
-                            views.Add($"{reader.GetString(0)}.{reader.GetString(1)}");
-                        }
+                        views.Add($"{reader.GetString(0)}.{reader.GetString(1)}");
                     }
-
-                    return new DbOperationResult(success: true, data: views);
                 }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "ListViews failed: {Message}", ex.Message);
 
-            return new DbOperationResult(success: false, error: ex.Message);
-        }
+                return new DbOperationResult(success: true, data: views);
+            }
+        });
     }
 }

@@ -10,6 +10,11 @@ namespace MssqlMcp.Tests
     public sealed class MssqlMcpTests : IDisposable
     {
         /// <summary>
+        /// Database key the test database is registered under.
+        /// </summary>
+        private const string TestDatabaseKey = "test";
+
+        /// <summary>
         /// Unique table name for testing.
         /// </summary>
         private readonly string _tableName;
@@ -19,20 +24,30 @@ namespace MssqlMcp.Tests
         /// </summary>
         private readonly Tools _tools;
 
+        /// <summary>
+        /// Initialises the tools against the test database, using connection strings
+        /// from the CONNECTION_STRING and READ_CONNECTION_STRING environment variables.
+        /// </summary>
         public MssqlMcpTests()
         {
             _tableName = $"TestTable_{Guid.NewGuid():N}";
 
-            SqlConnectionFactory connectionFactory = new SqlConnectionFactory();
+            InMemoryDatabaseRegistry databaseRegistry = new InMemoryDatabaseRegistry(
+                new DatabaseRegistration(
+                    TestDatabaseKey,
+                    Environment.GetEnvironmentVariable("READ_CONNECTION_STRING"),
+                    Environment.GetEnvironmentVariable("CONNECTION_STRING")));
+
+            SqlConnectionFactory connectionFactory = new SqlConnectionFactory(databaseRegistry);
             Mock<ILogger<Tools>> loggerMock = new Mock<ILogger<Tools>>();
 
-            _tools = new Tools(connectionFactory, loggerMock.Object);
+            _tools = new Tools(connectionFactory, databaseRegistry, loggerMock.Object);
         }
 
         public void Dispose()
         {
             // Cleanup: Drop the table after each test
-            DbOperationResult _ = _tools.DropTable($"DROP TABLE IF EXISTS {_tableName}").GetAwaiter().GetResult();
+            DbOperationResult _ = _tools.DropTable(TestDatabaseKey, $"DROP TABLE IF EXISTS {_tableName}").GetAwaiter().GetResult();
         }
 
         private async Task<bool> CreateTestTable()
@@ -54,7 +69,7 @@ namespace MssqlMcp.Tests
                 Environment.NewLine +
                 $"ALTER TABLE [dbo].[{_tableName}] ADD  CONSTRAINT [DF_{_tableName}_LastUpdated]  DEFAULT (sysdatetimeoffset()) FOR [LastUpdated];";
 
-            DbOperationResult createTableResult = await _tools.CreateTable(createTableSQL);
+            DbOperationResult createTableResult = await _tools.CreateTable(TestDatabaseKey, createTableSQL);
 
             if (createTableResult == null || !createTableResult.Success)
             {
@@ -66,7 +81,7 @@ namespace MssqlMcp.Tests
                 "    [CustomerName] ASC " + Environment.NewLine +
                 ")WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]";
 
-            DbOperationResult createIndexResult = await _tools.AlterDatabaseSchema(createIndexSQL);
+            DbOperationResult createIndexResult = await _tools.AlterDatabaseSchema(TestDatabaseKey, createIndexSQL);
 
             if (createIndexResult == null || !createIndexResult.Success)
             {
@@ -75,7 +90,7 @@ namespace MssqlMcp.Tests
 
             string insertDataSQL = $"INSERT INTO [{_tableName}] (CustomerName, EmailAddress) VALUES (N'Contoso', N'user@example.com')";
 
-            DbOperationResult insertDataResult = await _tools.UpdateData(insertDataSQL);
+            DbOperationResult insertDataResult = await _tools.UpdateData(TestDatabaseKey, insertDataSQL);
 
             if (insertDataResult == null || !insertDataResult.Success)
             {
@@ -89,7 +104,7 @@ namespace MssqlMcp.Tests
                 insertAdditionalDataSQL += $"INSERT INTO [{_tableName}] (CustomerName) VALUES (N'Customer {Guid.NewGuid()}');";
             }
 
-            DbOperationResult insertAdditionalDataResult = await _tools.UpdateData(insertAdditionalDataSQL);
+            DbOperationResult insertAdditionalDataResult = await _tools.UpdateData(TestDatabaseKey, insertAdditionalDataSQL);
 
             if (insertAdditionalDataResult == null || !insertAdditionalDataResult.Success)
             {
@@ -108,7 +123,7 @@ namespace MssqlMcp.Tests
             Assert.True(createTableResult);
 
             // Verify the table is now reachable via DescribeTable
-            DbOperationResult describeResult = await _tools.DescribeTable(_tableName);
+            DbOperationResult describeResult = await _tools.DescribeTable(TestDatabaseKey, _tableName);
 
             Assert.NotNull(describeResult);
             Assert.True(describeResult.Success);
@@ -122,7 +137,7 @@ namespace MssqlMcp.Tests
 
             Assert.True(createTableResult);
 
-            DbOperationResult result = await _tools.DescribeTable(_tableName);
+            DbOperationResult result = await _tools.DescribeTable(TestDatabaseKey, _tableName);
 
             Assert.NotNull(result);
             Assert.True(result.Success);
@@ -275,13 +290,13 @@ namespace MssqlMcp.Tests
 
             Assert.True(createTableResult);
 
-            DbOperationResult result = await _tools.DropTable(_tableName);
+            DbOperationResult result = await _tools.DropTable(TestDatabaseKey, _tableName);
 
             Assert.NotNull(result);
             Assert.True(result.Success);
 
             // Verify the table no longer exists
-            DbOperationResult describeResult = await _tools.DescribeTable(_tableName);
+            DbOperationResult describeResult = await _tools.DescribeTable(TestDatabaseKey, _tableName);
 
             Assert.NotNull(describeResult);
             Assert.False(describeResult.Success);
@@ -298,14 +313,14 @@ namespace MssqlMcp.Tests
 
             string sql = $"INSERT INTO {_tableName} (CustomerName) VALUES ('Test Customer')";
 
-            DbOperationResult result = await _tools.InsertData(sql);
+            DbOperationResult result = await _tools.InsertData(TestDatabaseKey, sql);
 
             Assert.NotNull(result);
             Assert.True(result.Success);
             Assert.True(result.RowsAffected.HasValue && result.RowsAffected.Value == 1);
 
             // Verify the inserted row can be read back
-            DbOperationResult readResult = await _tools.ReadData($"SELECT CustomerName FROM {_tableName} WHERE CustomerName = 'Test Customer'");
+            DbOperationResult readResult = await _tools.ReadData(TestDatabaseKey, $"SELECT CustomerName FROM {_tableName} WHERE CustomerName = 'Test Customer'");
 
             Assert.NotNull(readResult);
             Assert.True(readResult.Success);
@@ -324,7 +339,7 @@ namespace MssqlMcp.Tests
 
             Assert.True(createTableResult);
 
-            DbOperationResult result = await _tools.ListTables();
+            DbOperationResult result = await _tools.ListTables(TestDatabaseKey);
 
             Assert.NotNull(result);
             Assert.True(result.Success);
@@ -344,14 +359,14 @@ namespace MssqlMcp.Tests
 
             Assert.True(createTableResult);
 
-            DbOperationResult insertResult = await _tools.InsertData($"INSERT INTO {_tableName} (CustomerName) VALUES ('Test Customer')");
+            DbOperationResult insertResult = await _tools.InsertData(TestDatabaseKey, $"INSERT INTO {_tableName} (CustomerName) VALUES ('Test Customer')");
 
             Assert.NotNull(insertResult);
             Assert.True(insertResult.Success);
 
             string sql = $"SELECT CustomerID, CustomerName, EmailAddress, IsActive FROM {_tableName} WHERE CustomerName = 'Test Customer'";
 
-            DbOperationResult result = await _tools.ReadData(sql);
+            DbOperationResult result = await _tools.ReadData(TestDatabaseKey, sql);
 
             Assert.NotNull(result);
             Assert.True(result.Success);
@@ -374,21 +389,21 @@ namespace MssqlMcp.Tests
 
             Assert.True(createTableResult);
 
-            DbOperationResult insertResult = await _tools.InsertData($"INSERT INTO {_tableName} (CustomerName) VALUES ('Test Customer')");
+            DbOperationResult insertResult = await _tools.InsertData(TestDatabaseKey, $"INSERT INTO {_tableName} (CustomerName) VALUES ('Test Customer')");
 
             Assert.NotNull(insertResult);
             Assert.True(insertResult.Success);
 
             string sql = $"UPDATE {_tableName} SET CustomerName = 'Updated Customer' WHERE CustomerName = 'Test Customer'";
 
-            DbOperationResult result = await _tools.UpdateData(sql);
+            DbOperationResult result = await _tools.UpdateData(TestDatabaseKey, sql);
 
             Assert.NotNull(result);
             Assert.True(result.Success);
             Assert.True(result.RowsAffected.HasValue && result.RowsAffected.Value == 1);
 
             // Verify the row was updated and the original value is gone
-            DbOperationResult updatedRowsResult = await _tools.ReadData($"SELECT CustomerName FROM {_tableName} WHERE CustomerName = 'Updated Customer'");
+            DbOperationResult updatedRowsResult = await _tools.ReadData(TestDatabaseKey, $"SELECT CustomerName FROM {_tableName} WHERE CustomerName = 'Updated Customer'");
 
             Assert.NotNull(updatedRowsResult);
             Assert.True(updatedRowsResult.Success);
@@ -398,7 +413,7 @@ namespace MssqlMcp.Tests
             Assert.Single(updatedRows);
             Assert.Equal("Updated Customer", updatedRows[0]["CustomerName"]);
 
-            DbOperationResult originalRowsResult = await _tools.ReadData($"SELECT CustomerName FROM {_tableName} WHERE CustomerName = 'Test Customer'");
+            DbOperationResult originalRowsResult = await _tools.ReadData(TestDatabaseKey, $"SELECT CustomerName FROM {_tableName} WHERE CustomerName = 'Test Customer'");
 
             Assert.NotNull(originalRowsResult);
             Assert.True(originalRowsResult.Success);
@@ -410,7 +425,7 @@ namespace MssqlMcp.Tests
         {
             string sql = "CREATE TABLE";
 
-            DbOperationResult result = await _tools.CreateTable(sql);
+            DbOperationResult result = await _tools.CreateTable(TestDatabaseKey, sql);
 
             Assert.NotNull(result);
             Assert.False(result.Success);
@@ -420,7 +435,7 @@ namespace MssqlMcp.Tests
         [Fact]
         public async Task DescribeTable_ReturnsError_WhenTableDoesNotExist()
         {
-            DbOperationResult result = await _tools.DescribeTable("NonExistentTable");
+            DbOperationResult result = await _tools.DescribeTable(TestDatabaseKey, "NonExistentTable");
 
             Assert.NotNull(result);
             Assert.False(result.Success);
@@ -432,7 +447,7 @@ namespace MssqlMcp.Tests
         {
             string fakeTableName = "Equipment";
 
-            DbOperationResult result = await _tools.DropTable(fakeTableName);
+            DbOperationResult result = await _tools.DropTable(TestDatabaseKey, fakeTableName);
 
             Assert.NotNull(result);
             Assert.False(result.Success);
@@ -445,7 +460,7 @@ namespace MssqlMcp.Tests
         {
             string sql = "INSERT INTO TestTable";
 
-            DbOperationResult result = await _tools.InsertData(sql);
+            DbOperationResult result = await _tools.InsertData(TestDatabaseKey, sql);
 
             Assert.NotNull(result);
             Assert.False(result.Success);
@@ -457,7 +472,7 @@ namespace MssqlMcp.Tests
         {
             string sql = "SELECT FROM";
 
-            DbOperationResult result = await _tools.ReadData(sql);
+            DbOperationResult result = await _tools.ReadData(TestDatabaseKey, sql);
 
             Assert.NotNull(result);
             Assert.False(result.Success);
@@ -469,7 +484,7 @@ namespace MssqlMcp.Tests
         {
             string sql = "UPDATE TestTable";
 
-            DbOperationResult result = await _tools.UpdateData(sql);
+            DbOperationResult result = await _tools.UpdateData(TestDatabaseKey, sql);
 
             Assert.NotNull(result);
             Assert.False(result.Success);
@@ -488,14 +503,14 @@ namespace MssqlMcp.Tests
             string maliciousInput = "1; DROP TABLE " + _tableName + "; --";
             string sql = $"INSERT INTO {_tableName} (CustomerName, IsActive) VALUES ('Malicious', {maliciousInput})";
 
-            DbOperationResult result = await _tools.InsertData(sql);
+            DbOperationResult result = await _tools.InsertData(TestDatabaseKey, sql);
 
             Assert.NotNull(result);
             Assert.False(result.Success);
             Assert.Contains("syntax", result.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
             // Verify table still exists
-            DbOperationResult describeResult = await _tools.DescribeTable(_tableName);
+            DbOperationResult describeResult = await _tools.DescribeTable(TestDatabaseKey, _tableName);
 
             Assert.NotNull(describeResult);
             Assert.True(describeResult.Success);
@@ -512,7 +527,7 @@ namespace MssqlMcp.Tests
             // Attempt drop
             string maliciousInput = $"DROP TABLE {_tableName}";
 
-            DbOperationResult result = await _tools.ReadData(maliciousInput);
+            DbOperationResult result = await _tools.ReadData(TestDatabaseKey, maliciousInput);
 
             Assert.NotNull(result);
             Assert.False(result.Success);
@@ -522,7 +537,7 @@ namespace MssqlMcp.Tests
             Assert.Contains("you do not have permission", result.Error, StringComparison.OrdinalIgnoreCase);
 
             // Verify table still exists
-            DbOperationResult describeResult = await _tools.DescribeTable(_tableName);
+            DbOperationResult describeResult = await _tools.DescribeTable(TestDatabaseKey, _tableName);
 
             Assert.NotNull(describeResult);
             Assert.True(describeResult.Success);
