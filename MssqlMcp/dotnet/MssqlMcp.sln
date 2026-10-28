@@ -4,11 +4,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MssqlMcp.Tests", "MssqlMcp.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MssqlMcp", "MssqlMcp\MssqlMcp.csproj", "{6CBE2CB7-D019-4A0F-9AA5-38D18E6149DE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MssqlMcp.Configuration", "MssqlMcp.Configuration\MssqlMcp.Configuration.csproj", "{A0CA6BF0-C283-46AA-93E7-DBF8BA550F48}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MssqlMcp.Configuration", "MssqlMcp.Configuration\MssqlMcp.Configuration.csproj", "{A0CA6BF0-C283-46AA-93E7-DBF8BA550F48}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MssqlMcp.ConfigurationUtility", "MssqlMcp.ConfigurationUtility\MssqlMcp.ConfigurationUtility.csproj", "{17BA0872-E013-4AE2-8931-56FF958127D7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MssqlMcp.ConfigurationUtility", "MssqlMcp.ConfigurationUtility\MssqlMcp.ConfigurationUtility.csproj", "{17BA0872-E013-4AE2-8931-56FF958127D7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MssqlMcp.ConfigurationUtility.Tests", "MssqlMcp.ConfigurationUtility.Tests\MssqlMcp.ConfigurationUtility.Tests.csproj", "{6277B811-4BA2-463A-9251-C0EDA8C4023D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MssqlMcp.ConfigurationUtility.Tests", "MssqlMcp.ConfigurationUtility.Tests\MssqlMcp.ConfigurationUtility.Tests.csproj", "{6277B811-4BA2-463A-9251-C0EDA8C4023D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
